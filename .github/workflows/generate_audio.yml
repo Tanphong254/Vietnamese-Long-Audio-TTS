@@ -16,16 +16,10 @@ on:
         required: true
         type: choice
         default: "1.25"
-        options:
-          - "0.75"
-          - "1.0"
-          - "1.25"
-          - "1.5"
-          - "1.75"
+        options: ["0.75", "1.0", "1.25", "1.5", "1.75"]
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: long-audio-${{ github.workflow }}-${{ github.ref }}
@@ -36,7 +30,6 @@ jobs:
     name: Generate Vietnamese audiobook
     runs-on: ubuntu-latest
     timeout-minutes: 350
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,19 +40,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install FFmpeg and Python dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+      - name: Install Edge-TTS
+        run: python -m pip install --upgrade pip edge-tts
 
       - name: Validate kichban.txt
         run: |
           python - <<'PY'
           from pathlib import Path
           import sys
-
           source = Path("kichban.txt")
           if not source.is_file():
               sys.exit("Không tìm thấy kichban.txt ở thư mục gốc repository.")
@@ -67,61 +55,12 @@ jobs:
           if not text.strip():
               sys.exit("kichban.txt đang trống. Hãy sửa tệp này trước khi chạy.")
           if text.strip() == "__DAN_NOI_DUNG_TRUYEN_VAO_DAY__":
-              sys.exit("Hãy thay dòng hướng dẫn bên trong kichban.txt bằng nội dung truyện.")
+              sys.exit("Hãy thay dòng hướng dẫn trong kichban.txt bằng nội dung truyện.")
           print(f"Đã nhận kichban.txt: {len(text):,} ký tự.")
-          print("Không đặt giới hạn ký tự tổng trong chương trình; GitHub Actions vẫn có giới hạn thời gian chạy.")
+          print("Sẽ tạo một MP3 đầu ra từ toàn bộ kịch bản.")
           PY
 
-      - name: Find latest checkpoint
-        id: checkpoint
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const response = await github.rest.actions.listWorkflowRuns({
-              owner,
-              repo,
-              workflow_id: "generate_audio.yml",
-              branch: "main",
-              per_page: 20
-            });
-
-            const runs = response.data.workflow_runs
-              .filter(run => run.id !== context.runId && run.status === "completed")
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-            for (const run of runs) {
-              const result = await github.rest.actions.listWorkflowRunArtifacts({
-                owner,
-                repo,
-                run_id: run.id,
-                per_page: 100
-              });
-              const artifact = result.data.artifacts.find(
-                item => item.name === "tts-checkpoint" && !item.expired
-              );
-              if (artifact) {
-                core.setOutput("run_id", String(run.id));
-                core.info("Found checkpoint in previous run " + run.id + ".");
-                return;
-              }
-            }
-
-            core.setOutput("run_id", "");
-            core.info("No previous checkpoint found; a new job will be created.");
-
-      - name: Restore previous checkpoint
-        if: ${{ steps.checkpoint.outputs.run_id != '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tts-checkpoint
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.checkpoint.outputs.run_id }}
-          path: .
-
-      - name: Generate or resume long audio
-        id: tts
+      - name: Generate one MP3 from the whole script
         env:
           VOICE_CHOICE: ${{ inputs.voice }}
           RATE: ${{ inputs.rate }}
@@ -132,31 +71,32 @@ jobs:
             *) echo "::error::Giọng đọc không hợp lệ"; exit 1 ;;
           esac
 
-          # Stop before the overall job timeout so the checkpoint can be saved.
-          timeout --signal=INT --kill-after=30s 330m \
-            python tts_cli.py \
+          # One whole-script synthesis and one output MP3.
+          # Edge-TTS may internally stream text fragments to its service.
+          timeout --signal=INT --kill-after=30s 340m \
+            python generate_audio.py \
               --input kichban.txt \
+              --output outputs/audio_youtube.mp3 \
               --voice "$VOICE_ID" \
               --rate "$RATE" \
-              --chunk-size 2400 \
-              --auto-resume-matching
+              --attempts 3
 
-      - name: Upload completed MP3
-        if: ${{ success() && steps.tts.outputs.output_file != '' }}
+      - name: Upload MP3
+        if: ${{ success() && hashFiles('outputs/audio_youtube.mp3') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: audio-output-${{ github.run_id }}
-          path: ${{ steps.tts.outputs.output_file }}
+          name: audio-output
+          path: outputs/audio_youtube.mp3
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
-      - name: Upload checkpoint for retry/resume
-        if: ${{ always() }}
+      - name: Upload partial audio for diagnosis if generation fails
+        if: ${{ failure() && hashFiles('outputs/audio_youtube.partial.mp3') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tts-checkpoint
-          path: jobs/
+          name: partial-audio-diagnostic
+          path: outputs/audio_youtube.partial.mp3
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 2
           compression-level: 0
