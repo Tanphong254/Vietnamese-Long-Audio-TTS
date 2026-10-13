@@ -201,10 +201,30 @@ def merge_mp3_segments(segment_paths: list[Path], job_dir: Path, output_path: Pa
 async def _synthesize_async(text: str, voice: str, rate: str, output_path: Path) -> None:
     try:
         import edge_tts
+        import edge_tts.communicate as edge_communicate
+        from edge_tts.constants import TRUSTED_CLIENT_TOKEN
     except ImportError as exc:
         raise RuntimeError(
             "Chưa cài edge-tts. Hãy chạy: python -m pip install -r requirements.txt"
         ) from exc
+
+    # 2026-10 workaround for Edge-TTS WebSocket handshake HTTP 403.
+    # Upstream issue #490 reports that Microsoft's old speech.platform.bing.com
+    # synthesis handshake is rejected by the service in current deployments.
+    # The alternate endpoint below has been reported to work with edge-tts 7.2.8.
+    # Keep this isolated so it can be removed when the upstream library fixes the
+    # handshake. Set EDGE_TTS_WEBSOCKET_URL to override it, or set it to
+    # "default" to retain the endpoint bundled with edge-tts.
+    endpoint_override = os.environ.get("EDGE_TTS_WEBSOCKET_URL", "").strip()
+    if endpoint_override.lower() == "default":
+        pass
+    elif endpoint_override:
+        edge_communicate.WSS_URL = endpoint_override
+    else:
+        edge_communicate.WSS_URL = (
+            "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+            f"?Ocp-Apim-Subscription-Key={TRUSTED_CLIENT_TOKEN}"
+        )
 
     communicator = edge_tts.Communicate(
         text=text,
