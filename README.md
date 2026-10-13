@@ -1,117 +1,71 @@
-# Vietnamese Long Audio TTS (Codespaces CLI)
+# Vietnamese Long Audio TTS — GitHub Actions
 
-Công cụ dòng lệnh tạo audio truyện dài tiếng Việt bằng [Edge-TTS](https://github.com/rany2/edge-tts). Dự án này **không có giao diện web/Flask**. Bạn chạy lệnh trong terminal của GitHub Codespaces, theo dõi tiến trình ngay trong terminal, rồi tải MP3 từ thư mục `outputs/`.
+Tạo audio truyện dài tiếng Việt bằng Edge-TTS **ngay từ giao diện GitHub Actions**. Bạn không cần chạy Flask hay mở website riêng, và không cần cài Python trên máy tính cá nhân để chạy tác vụ.
 
-Edge-TTS cần Internet để gọi dịch vụ tổng hợp giọng nói. Codespaces có giới hạn sử dụng và có thể phát sinh chi phí tùy tài khoản; đây không phải tài nguyên chạy miễn phí không giới hạn. Kiểm tra phần sử dụng Codespaces trong tài khoản trước khi chạy các tác vụ rất dài.
+> **Quan trọng về quyền riêng tư:** Repository này đang Public. Mọi tệp truyện được commit vào repository, cùng các checkpoint artifact được tạo ra, có thể được người khác truy cập. Chỉ sử dụng quy trình này với văn bản bạn sẵn sàng công khai. Với truyện riêng tư, hãy chuyển repository sang Private trước khi tải văn bản lên. Đừng đưa truyện riêng tư vào artifact của một repository công khai.
+
+Edge-TTS cần Internet để gọi dịch vụ giọng nói trực tuyến. GitHub Actions có giới hạn thời gian, giới hạn artifact và điều khoản sử dụng theo tài khoản; không bảo đảm mọi tác vụ đều hoàn tất nếu dịch vụ mạng gặp lỗi.
 
 ## Tính năng
 
-- Nhận tệp truyện `.txt` UTF-8 hoặc UTF-8 BOM.
-- Giọng tiếng Việt Nam Minh và Hoài My.
-- Tốc độ đọc 0.75x, 1.0x, 1.25x, 1.5x và 1.75x.
-- Chia văn bản theo ranh giới tự nhiên, giữ nguyên nội dung và thứ tự.
-- Xử lý lần lượt từng đoạn, thử lại lỗi tạm thời.
-- Lưu trạng thái và audio của từng đoạn xuống đĩa.
-- Khôi phục tác vụ còn dở khi chạy lại trong cùng Codespace; không phải tạo lại những đoạn MP3 còn hợp lệ.
-- Tự ghép các đoạn thành một MP3 bằng FFmpeg.
-- Hỗ trợ liệt kê tác vụ, tiếp tục/thử lại và báo lỗi trong terminal.
-- GitHub Actions chạy kiểm thử tự động.
+- Khởi chạy từ **Actions → Generate long audio → Run workflow**.
+- Giọng tiếng Việt Nam Minh và Hoài My; tốc độ từ 0.75x đến 1.75x.
+- Chia văn bản dài thành đoạn, xử lý tuần tự và ghép thành MP3.
+- Lưu audio từng đoạn trong lúc chạy; có thể khôi phục từ checkpoint artifact sau khi tác vụ thất bại.
+- Tải MP3 cuối cùng qua artifact audio-output.
+- Tác vụ tối đa 330 phút cho mỗi lần chạy, phụ thuộc vào giới hạn của GitHub Actions và dịch vụ Edge-TTS.
 
-## Chạy trên GitHub Codespaces
+## Chuẩn bị tệp truyện
 
-1. Mở [repository này](https://github.com/Tanphong254/Vietnamese-Long-Audio-TTS).
-2. Bấm **Code → Codespaces → Create codespace on main**. Nếu GitHub hỏi cấu hình, chọn cấu hình mặc định của repository.
-3. Chờ môi trường hoàn tất cài đặt. Tệp `.devcontainer/devcontainer.json` cài Python dependencies và FFmpeg.
-4. Mở terminal bên trong Codespaces. Tạo thư mục đầu vào riêng:
+1. Tạo thư mục input trong repository nếu chưa có.
+2. Thêm tệp TXT mã hóa UTF-8 vào đó, ví dụ input/kichban.txt.
+3. Commit tệp lên branch main.
 
-   ```bash
-   mkdir -p input jobs outputs
-   ```
+**Repository Public nghĩa là tệp truyện trong repository cũng công khai.** Nếu không muốn nội dung truyện bị công khai, đừng tải tệp truyện lên repository Public. Hãy đổi repository sang Private trước khi thêm nội dung. Trường source_file là đường dẫn tệp đã tồn tại trên branch, không phải hộp thoại tải tệp trong giao diện Run workflow.
 
-5. Tải tệp truyện từ máy tính vào thư mục `input/` bằng File Explorer của VS Code Web (dùng menu Upload nếu có, hoặc kéo thả tệp vào Explorer). Không cần và không nên commit tệp truyện lên GitHub.
-6. Kiểm tra lệnh đã sẵn sàng:
+## Tạo audio trên GitHub
 
-   ```bash
-   python --version
-   python tts_cli.py --help
-   ```
+1. Mở tab **Actions** của repository.
+2. Chọn workflow **Generate long audio** ở cột trái.
+3. Bấm **Run workflow**.
+4. Chọn branch main, rồi nhập:
+   - **task_mode:** new
+   - **source_file:** input/kichban.txt
+   - **title:** tên truyện (tùy chọn)
+   - **voice:** vi-VN-NamMinhNeural hoặc vi-VN-HoaiMyNeural
+   - **rate:** 0.75, 1.0, 1.25, 1.5 hoặc 1.75
+   - **chunk_size:** 1200, 1800, 2400 hoặc 3000
+5. Bấm nút xanh **Run workflow**.
+6. Mở lượt chạy vừa xuất hiện, chọn job **Generate Vietnamese audiobook** để xem log và tiến trình. Không cần giữ tab trình duyệt mở, nhưng lượt chạy sẽ bị giới hạn thời gian.
+7. Khi hoàn thành, kéo xuống phần **Artifacts** ở trang chi tiết lượt chạy. Tải artifact có tên bắt đầu bằng audio-output, rồi giải nén để lấy tệp MP3.
 
-## Tạo audio
+## Tiếp tục khi tác vụ bị gián đoạn
 
-Ví dụ đọc tệp `input/truyen.txt` bằng giọng nam Nam Minh tốc độ 1.25x:
+Khi lượt chạy thất bại, workflow sẽ cố tải artifact tts-checkpoint lên trong 7 ngày. Artifact này có trạng thái tác vụ và các đoạn MP3 đã sinh ra để khôi phục tiến trình. Giữ lại tệp đầu vào gốc trên repository và không xóa artifact trước khi tiếp tục.
 
-```bash
-python tts_cli.py --input input/truyen.txt --voice vi-VN-NamMinhNeural --rate 1.25
-```
+1. Mở trang chi tiết của lượt chạy bị lỗi.
+2. Trong log của job, tìm dòng “Mã tác vụ:” và sao chép mã gồm 32 ký tự hex.
+3. Sao chép **Run ID** từ URL trang chạy. Ví dụ URL có dạng https://github.com/OWNER/REPO/actions/runs/1234567890, thì 1234567890 là Run ID.
+4. Vào **Actions → Generate long audio → Run workflow**, chọn:
+   - **task_mode:** resume
+   - **resume_job_id:** mã tác vụ từ log
+   - **restore_run_id:** Run ID của lượt chạy trước
+5. Bấm **Run workflow**. Workflow khôi phục artifact rồi tiếp tục tác vụ và giữ các đoạn MP3 hợp lệ.
 
-Dùng giọng nữ Hoài My tốc độ bình thường:
-
-```bash
-python tts_cli.py --input input/truyen.txt --voice vi-VN-HoaiMyNeural --rate 1.0
-```
-
-Điều chỉnh kích thước đoạn (500–3500 ký tự; mặc định 2400):
-
-```bash
-python tts_cli.py --input input/truyen.txt --chunk-size 1800
-```
-
-Khi hoàn tất, terminal sẽ in đường dẫn MP3. Mở thư mục `outputs/` trong Explorer của Codespaces, bấm chuột phải vào tệp MP3 và tải xuống. Tải MP3 về máy tính trước khi xóa Codespace. **Dữ liệu trong Codespace không nằm trong Git commit; nếu bạn xóa Codespace thì các tệp riêng và audio trong ổ đĩa Codespace cũng có thể bị mất.**
-
-## Theo dõi, liệt kê và tiếp tục
-
-Liệt kê các tác vụ đã lưu:
-
-```bash
-python tts_cli.py --list-jobs
-```
-
-Mỗi lần tạo audio, chương trình in ra mã tác vụ. Ghi lại mã này. Nếu tác vụ bị gián đoạn, Codespace bị dừng, hoặc một đoạn thất bại, chạy:
-
-```bash
-python tts_cli.py --resume MA_TAC_VU
-```
-
-Thay `MA_TAC_VU` bằng ID được in trong terminal. Chương trình sẽ thử lại tác vụ lỗi/bị hủy và giữ những đoạn audio đã tạo hợp lệ. Nếu tác vụ còn chạy trong terminal cũ, không khởi động một lệnh resume thứ hai cho cùng tác vụ.
-
-Bạn có thể nhấn `Ctrl+C` để ngừng theo dõi; nếu tiến trình bị dừng, hãy dùng `--resume` để tiếp tục. Việc tổng hợp một đoạn đang gọi dịch vụ mạng có thể chưa dừng tức thì.
-
-## Tệp và dữ liệu cá nhân
-
-- `tts_cli.py`: lệnh dòng lệnh chính.
-- `tts_engine.py`: chia văn bản, hàng đợi, lưu tiến độ, Edge-TTS và ghép MP3.
-- `.devcontainer/devcontainer.json`: cấu hình môi trường Codespaces.
-- `input/`: tệp truyện bạn tải vào; được `.gitignore` loại khỏi Git.
-- `jobs/`: văn bản nguồn, trạng thái tác vụ và các đoạn MP3; được loại khỏi Git.
-- `outputs/`: MP3 hoàn chỉnh; được loại khỏi Git.
-
-Repository này là Public. Đừng commit văn bản truyện, dữ liệu cá nhân hoặc các tệp MP3. Trước khi commit mọi thay đổi, kiểm tra:
-
-```bash
-git status --short
-```
-
-`.gitignore` giảm nguy cơ đưa nhầm dữ liệu vào Git nhưng không thay thế việc kiểm tra thủ công.
+Nếu lượt chạy trước không có artifact tts-checkpoint hoặc artifact đã hết hạn, việc resume sẽ không thực hiện được. Đừng xóa một lượt chạy đang cần dùng để khôi phục.
 
 ## Kiểm thử
 
-Trong Codespaces:
+Workflow Tests chạy tự động khi đẩy thay đổi lên main hoặc tạo Pull Request. Các bài kiểm thử cốt lõi dùng engine giả, không gửi nội dung thử lên dịch vụ Edge-TTS.
 
-```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-```
+## Các giới hạn cần biết
 
-Các bài kiểm thử dùng hàm tổng hợp giả để không cần gửi văn bản thử lên dịch vụ Edge-TTS. Bài kiểm thử thành công không bảo đảm dịch vụ mạng luôn sẵn sàng hay mọi truyện rất dài sẽ hoàn tất không lỗi.
-
-## Giới hạn cần biết
-
-- Tác vụ dài phụ thuộc tốc độ mạng, dịch vụ Edge-TTS và thời gian/dung lượng Codespaces khả dụng.
-- Quá trình không thể bảo đảm hoàn thành khi môi trường bị xóa, lưu trữ bị đầy hoặc dịch vụ từ chối yêu cầu. Hãy tải MP3 hoàn chỉnh về máy sau khi tạo.
-- Không commit nội dung truyện hoặc audio vào repository Public.
-- Edge-TTS dùng dịch vụ trực tuyến, không phải engine ngoại tuyến.
-- Đây là dự án độc lập, không được Microsoft bảo trợ.
+- GitHub Actions không có trường tải lên file TXT dài trực tiếp trong form Run workflow; đầu vào phải nằm ở một nguồn có thể truy cập.
+- Thời gian tạo phụ thuộc mạng, dịch vụ Edge-TTS, số đoạn và mức giới hạn runner.
+- Checkpoint có chứa văn bản nguồn và MP3 từng đoạn. Artifact của repository Public không phù hợp để lưu nội dung riêng tư.
+- Tải MP3 về máy sau khi hoàn tất; artifact có thời hạn lưu trữ 14 ngày.
+- Đây là dự án cộng đồng độc lập, không được Microsoft bảo trợ.
 
 ## License
 
-MIT. Các thư viện và binary bên thứ ba có giấy phép riêng.
+MIT. Các thư viện/binary bên thứ ba có giấy phép riêng.
