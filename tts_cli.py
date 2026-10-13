@@ -13,6 +13,7 @@ from tts_engine import JobManager, RATE_OPTIONS, VOICE_OPTIONS
 BASE_DIR = Path(__file__).resolve().parent
 JOBS_DIR = BASE_DIR / "jobs"
 OUTPUTS_DIR = BASE_DIR / "outputs"
+DEFAULT_INPUT = BASE_DIR / "kichban.txt"
 
 
 def write_github_output(name: str, value: str) -> None:
@@ -42,6 +43,89 @@ def read_job_files() -> list[dict[str, Any]]:
     return jobs
 
 
+def _read_state_file(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _write_state_file(path: Path, state: dict[str, Any]) -> None:
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    temp_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
+
+
+def prepare_auto_resume_matching(
+    text: str,
+    voice: str,
+    rate: str,
+    chunk_size: int,
+) -> str | None:
+    """Find the newest unfinished job with identical source and settings.
+
+    Older jobs from a downloaded Actions checkpoint are suspended so that the
+    single worker cannot accidentally resume a different story or voice.
+    """
+    resumable_statuses = {
+        "queued", "running", "merging", "interrupted",
+        "failed", "cancelled", "cancelling", "suspended",
+    }
+    active_statuses = {"queued", "running", "merging", "interrupted", "cancelling"}
+    matches: list[dict[str, Any]] = []
+
+    if JOBS_DIR.exists():
+        for status_path in JOBS_DIR.glob("*/status.json"):
+            state = _read_state_file(status_path)
+            if not state:
+                continue
+            if (
+                state.get("voice") != voice
+                or state.get("rate") != rate
+                or state.get("chunk_size") != chunk_size
+            ):
+                continue
+            source_path = status_path.parent / "source.txt"
+            try:
+                saved_text = source_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if saved_text == text:
+                matches.append(state)
+
+    matches.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+    newest = matches[0] if matches else None
+    selected_id: str | None = None
+
+    # A most-recent completed task means the user intentionally started a new
+    # run with the same story/settings; don't resume an older failed duplicate.
+    if newest and newest.get("status") in resumable_statuses:
+        candidate_id = str(newest.get("id", ""))
+        if len(candidate_id) == 32:
+            selected_id = candidate_id
+
+    if JOBS_DIR.exists():
+        for status_path in JOBS_DIR.glob("*/status.json"):
+            state = _read_state_file(status_path)
+            if not state or str(state.get("id", "")) == selected_id:
+                continue
+            if state.get("status") in active_statuses:
+                state["status"] = "suspended"
+                state["current_chunk"] = None
+                state["cancel_requested"] = False
+                state["error"] = (
+                    "Tạm dừng để ưu tiên tác vụ hiện tại. "
+                    "Tác vụ này không bị xóa."
+                )
+                _write_state_file(status_path, state)
+
+    return selected_id
+
+
 def print_jobs() -> int:
     jobs = read_job_files()
     if not jobs:
@@ -63,19 +147,18 @@ def print_jobs() -> int:
         elif job.get("error"):
             print(f"    Lỗi: {str(job['error'])[:240]}")
     print("-" * 90)
-    print("Tiếp tục một tác vụ: python tts_cli.py --resume MA_TAC_VU")
     return 0
 
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Tạo audio truyện dài bằng Edge-TTS ngay trong GitHub Codespaces. "
-            "Từng đoạn được lưu để có thể tiếp tục sau khi bị gián đoạn."
+            "Tạo audio truyện dài bằng Edge-TTS. "
+            "Trong GitHub Actions, tệp đầu vào mặc định là kichban.txt."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--input", help="Đường dẫn tệp TXT UTF-8/UTF-8 BOM.")
+    parser.add_argument("--input", default=str(DEFAULT_INPUT), help="Tệp TXT UTF-8/UTF-8 BOM.")
     parser.add_argument("--title", help="Tên truyện dùng cho tên tệp MP3.")
     parser.add_argument(
         "--voice",
@@ -93,17 +176,22 @@ def make_parser() -> argparse.ArgumentParser:
         "--chunk-size",
         type=int,
         default=2400,
-        help="Độ dài mỗi đoạn văn bản (500–3500 ký tự).",
+        help="Kích thước nội bộ của mỗi đoạn gửi Edge-TTS.",
     )
     parser.add_argument(
         "--resume",
         metavar="JOB_ID",
-        help="Tiếp tục hoặc thử lại một tác vụ đã lưu.",
+        help="Tiếp tục hoặc thử lại tác vụ đã lưu theo mã.",
+    )
+    parser.add_argument(
+        "--auto-resume-matching",
+        action="store_true",
+        help="Tự tiếp tục checkpoint khớp nội dung, giọng đọc và tốc độ.",
     )
     parser.add_argument(
         "--list-jobs",
         action="store_true",
-        help="Liệt kê tác vụ đã lưu và không bắt đầu tạo audio.",
+        help="Liệt kê tác vụ đã lưu.",
     )
     parser.add_argument(
         "--poll-interval",
@@ -146,29 +234,29 @@ def monitor_job(manager: JobManager, job_id: str, poll_interval: float) -> int:
                     if not output_path.is_file() or output_path.stat().st_size == 0:
                         print(f"Không tìm thấy MP3 hợp lệ: {output_path}", file=sys.stderr)
                         return 1
+                    relative_path = output_path.relative_to(BASE_DIR).as_posix()
+                    write_github_output("output_file", relative_path)
                     print("TẠO AUDIO THÀNH CÔNG")
                     print(f"Tệp: {output_path}")
                     print(f"Mã tác vụ: {job_id}")
-                    print("Trong Explorer của Codespaces, mở thư mục outputs và tải MP3 về máy.")
                     return 0
 
                 if status == "failed":
                     print("TÁC VỤ THẤT BẠI")
                     print(state.get("error") or "Không có thông tin lỗi.")
-                    print(f"Các đoạn đã tạo vẫn được giữ lại. Tiếp tục bằng:")
-                    print(f"    python tts_cli.py --resume {job_id}")
+                    print("Checkpoint sẽ được giữ lại nếu GitHub Actions tải artifact thành công.")
+                    print(f"Mã tác vụ: {job_id}")
                     return 1
 
                 print("Tác vụ đã bị hủy.")
-                print(f"Tiếp tục bằng: python tts_cli.py --resume {job_id}")
+                print(f"Mã tác vụ: {job_id}")
                 return 1
 
             time.sleep(max(0.5, poll_interval))
 
     except KeyboardInterrupt:
-        print("\nĐã ngắt theo dõi. Nếu Codespace bị dừng, hãy tiếp tục bằng:")
-        print(f"    python tts_cli.py --resume {job_id}")
-        print("Các đoạn đã lưu trên đĩa sẽ được giữ lại.")
+        print("\nĐã ngắt theo dõi. Các đoạn đã lưu sẽ được giữ lại nếu checkpoint được tải lên.")
+        print(f"Mã tác vụ: {job_id}")
         return 130
 
 
@@ -181,12 +269,12 @@ def main() -> int:
 
     if args.poll_interval <= 0:
         parser.error("--poll-interval phải lớn hơn 0.")
-
-    if args.resume and args.input:
-        parser.error("Chọn --resume hoặc --input, không dùng cả hai cùng lúc.")
-
+    if args.resume and args.auto_resume_matching:
+        parser.error("Chọn --resume hoặc --auto-resume-matching, không dùng cả hai.")
+    if args.resume and args.input != str(DEFAULT_INPUT):
+        parser.error("--resume không cần --input.")
     if not args.resume and not args.input:
-        parser.error("Cần cung cấp --input FILE hoặc --resume JOB_ID.")
+        parser.error("Cần cung cấp tệp TXT.")
 
     manager: JobManager
 
@@ -195,15 +283,16 @@ def main() -> int:
             write_github_output("job_id", args.resume)
             manager = JobManager(JOBS_DIR, OUTPUTS_DIR)
             state = manager.get_job(args.resume)
-            if state.get("status") in {"failed", "cancelled"}:
-                state = manager.retry(args.resume)
+            if state.get("status") in {"failed", "cancelled", "suspended"}:
+                manager.retry(args.resume)
                 print("Đã đưa tác vụ trở lại hàng đợi; các đoạn MP3 hợp lệ được giữ lại.")
             elif state.get("status") == "completed":
                 output = state.get("output_filename")
-                print("Tác vụ này đã hoàn thành.")
-                if output:
-                    print(f"Tệp: {OUTPUTS_DIR / str(output)}")
-                return 0
+                if output and (OUTPUTS_DIR / str(output)).is_file():
+                    path = OUTPUTS_DIR / str(output)
+                    write_github_output("output_file", path.relative_to(BASE_DIR).as_posix())
+                    print(f"Tác vụ này đã hoàn thành: {path}")
+                    return 0
             print(f"Đang tiếp tục tác vụ: {args.resume}")
             return monitor_job(manager, args.resume, args.poll_interval)
         except (FileNotFoundError, ValueError) as exc:
@@ -211,9 +300,10 @@ def main() -> int:
             return 2
 
     input_path = Path(args.input).expanduser()
+    if not input_path.is_absolute():
+        input_path = (BASE_DIR / input_path).resolve()
     if not input_path.is_file():
         print(f"Không tìm thấy tệp đầu vào: {input_path}", file=sys.stderr)
-        print("Trong Codespaces, tải tệp TXT vào workspace rồi truyền đường dẫn sau --input.")
         return 2
 
     try:
@@ -228,11 +318,34 @@ def main() -> int:
     if not text.strip():
         print("Tệp đầu vào không có nội dung.", file=sys.stderr)
         return 2
+    if text.strip() == "__DAN_NOI_DUNG_TRUYEN_VAO_DAY__":
+        print("Hãy thay dòng hướng dẫn trong kichban.txt bằng nội dung truyện trước khi chạy.", file=sys.stderr)
+        return 2
 
     title = args.title or input_path.stem
+    selected_job_id: str | None = None
 
     try:
+        if args.auto_resume_matching:
+            selected_job_id = prepare_auto_resume_matching(
+                text=text,
+                voice=args.voice,
+                rate=args.rate,
+                chunk_size=args.chunk_size,
+            )
+            if selected_job_id:
+                print(f"Tìm thấy checkpoint phù hợp: {selected_job_id}")
+
         manager = JobManager(JOBS_DIR, OUTPUTS_DIR)
+
+        if selected_job_id:
+            state = manager.get_job(selected_job_id)
+            if state.get("status") in {"failed", "cancelled", "suspended"}:
+                state = manager.retry(selected_job_id)
+            write_github_output("job_id", selected_job_id)
+            print("Đang tiếp tục tác vụ phù hợp; các đoạn MP3 hợp lệ sẽ được giữ lại.")
+            return monitor_job(manager, selected_job_id, args.poll_interval)
+
         job = manager.create_job(
             title=title,
             text=text,
@@ -240,16 +353,16 @@ def main() -> int:
             rate=args.rate,
             chunk_size=args.chunk_size,
         )
-    except (ValueError, OSError) as exc:
-        print(f"Không thể tạo tác vụ: {exc}", file=sys.stderr)
+    except (ValueError, OSError, FileNotFoundError) as exc:
+        print(f"Không thể tạo hoặc tiếp tục tác vụ: {exc}", file=sys.stderr)
         return 2
 
     job_id = str(job["id"])
     write_github_output("job_id", job_id)
-    print(f"Đã tạo tác vụ cho: {title}")
+    print(f"Đã thêm tác vụ cho: {title}")
     print(f"Mã tác vụ: {job_id}")
     print(f"Tổng số đoạn: {job.get('total_chunks', 0)}")
-    print("Đang tổng hợp bằng Edge-TTS. Không commit tệp truyện hoặc MP3 lên repository Public.")
+    print("Đang tổng hợp bằng Edge-TTS. Tệp input/MP3 không cần commit trong lúc tạo audio.")
     return monitor_job(manager, job_id, args.poll_interval)
 
 
