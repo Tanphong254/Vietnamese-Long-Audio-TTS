@@ -6,7 +6,9 @@ __pycache__/
 venv/
 .env
 
-# Local user content: source novels, partial segments and generated audio
+# Private novel inputs and generated audio. Do not commit to the public repo.
+/input/*
+!/input/.gitkeep
 /jobs/*
 !/jobs/.gitkeep
 /outputs/*
