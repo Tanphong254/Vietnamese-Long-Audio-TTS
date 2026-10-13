@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,15 @@ from tts_engine import JobManager, RATE_OPTIONS, VOICE_OPTIONS
 BASE_DIR = Path(__file__).resolve().parent
 JOBS_DIR = BASE_DIR / "jobs"
 OUTPUTS_DIR = BASE_DIR / "outputs"
+
+
+def write_github_output(name: str, value: str) -> None:
+    """Expose a value as a step output when running inside GitHub Actions."""
+    output_file = os.environ.get("GITHUB_OUTPUT")
+    if not output_file:
+        return
+    with open(output_file, "a", encoding="utf-8") as handle:
+        handle.write(f"{name}={value}\n")
 
 
 def read_job_files() -> list[dict[str, Any]]:
@@ -182,6 +192,7 @@ def main() -> int:
 
     if args.resume:
         try:
+            write_github_output("job_id", args.resume)
             manager = JobManager(JOBS_DIR, OUTPUTS_DIR)
             state = manager.get_job(args.resume)
             if state.get("status") in {"failed", "cancelled"}:
@@ -234,6 +245,7 @@ def main() -> int:
         return 2
 
     job_id = str(job["id"])
+    write_github_output("job_id", job_id)
     print(f"Đã tạo tác vụ cho: {title}")
     print(f"Mã tác vụ: {job_id}")
     print(f"Tổng số đoạn: {job.get('total_chunks', 0)}")
