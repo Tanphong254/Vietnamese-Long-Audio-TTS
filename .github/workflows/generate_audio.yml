@@ -3,22 +3,6 @@ name: Generate long audio
 on:
   workflow_dispatch:
     inputs:
-      task_mode:
-        description: "Tạo audio mới hoặc tiếp tục tác vụ bị gián đoạn"
-        required: true
-        type: choice
-        default: new
-        options: [new, resume]
-      source_file:
-        description: "Đường dẫn TXT đã có trong repository (chỉ dùng khi tạo mới)"
-        required: false
-        type: string
-        default: input/kichban.txt
-      title:
-        description: "Tên truyện để đặt tên MP3 (không bắt buộc)"
-        required: false
-        type: string
-        default: ""
       voice:
         description: "Giọng đọc tiếng Việt"
         required: true
@@ -32,23 +16,12 @@ on:
         required: true
         type: choice
         default: "1.25"
-        options: ["0.75", "1.0", "1.25", "1.5", "1.75"]
-      chunk_size:
-        description: "Kích thước đoạn văn bản (ký tự)"
-        required: true
-        type: choice
-        default: "2400"
-        options: ["1200", "1800", "2400", "3000"]
-      resume_job_id:
-        description: "Mã tác vụ để tiếp tục (chỉ dùng ở chế độ resume)"
-        required: false
-        type: string
-        default: ""
-      restore_run_id:
-        description: "Run ID của lần chạy trước có artifact tts-checkpoint"
-        required: false
-        type: string
-        default: ""
+        options:
+          - "0.75"
+          - "1.0"
+          - "1.25"
+          - "1.5"
+          - "1.75"
 
 permissions:
   contents: read
@@ -62,7 +35,7 @@ jobs:
   generate:
     name: Generate Vietnamese audiobook
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
 
     steps:
       - name: Checkout repository
@@ -81,101 +54,109 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Validate workflow inputs
-        env:
-          TASK_MODE: ${{ inputs.task_mode }}
-          SOURCE_FILE: ${{ inputs.source_file }}
-          RESUME_JOB_ID: ${{ inputs.resume_job_id }}
-          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+      - name: Validate kichban.txt
         run: |
           python - <<'PY'
-          import os
-          import re
-          import sys
           from pathlib import Path
+          import sys
 
-          mode = os.environ["TASK_MODE"]
-          if mode == "resume":
-              job_id = os.environ.get("RESUME_JOB_ID", "").strip()
-              run_id = os.environ.get("RESTORE_RUN_ID", "").strip()
-              if not re.fullmatch(r"[0-9a-f]{32}", job_id):
-                  sys.exit("Lỗi: chế độ resume cần resume_job_id gồm 32 ký tự hex.")
-              if not re.fullmatch(r"[0-9]+", run_id):
-                  sys.exit("Lỗi: chế độ resume cần restore_run_id (Run ID số của lần chạy trước).")
-              sys.exit(0)
-
-          root = Path.cwd().resolve()
-          raw = os.environ.get("SOURCE_FILE", "").strip()
-          if not raw:
-              sys.exit("Lỗi: source_file đang trống.")
-          source = Path(raw).resolve()
-          try:
-              source.relative_to(root)
-          except ValueError:
-              sys.exit("Lỗi: source_file phải nằm trong repository.")
-          if source.suffix.lower() != ".txt":
-              sys.exit("Lỗi: source_file phải là tệp .txt.")
+          source = Path("kichban.txt")
           if not source.is_file():
-              sys.exit(f"Không tìm thấy {raw}. Hãy thêm TXT vào repository rồi chạy lại.")
-          if source.stat().st_size == 0:
-              sys.exit("Lỗi: tệp văn bản trống.")
-          print(f"Đã xác nhận tệp đầu vào: {source.relative_to(root)}")
+              sys.exit("Không tìm thấy kichban.txt ở thư mục gốc repository.")
+          text = source.read_text(encoding="utf-8-sig")
+          if not text.strip():
+              sys.exit("kichban.txt đang trống. Hãy sửa tệp này trước khi chạy.")
+          if text.strip() == "__DAN_NOI_DUNG_TRUYEN_VAO_DAY__":
+              sys.exit("Hãy thay dòng hướng dẫn bên trong kichban.txt bằng nội dung truyện.")
+          print(f"Đã nhận kichban.txt: {len(text):,} ký tự.")
+          print("Không đặt giới hạn ký tự tổng trong chương trình; GitHub Actions vẫn có giới hạn thời gian chạy.")
           PY
 
-      - name: Restore checkpoint from previous run
-        if: ${{ inputs.task_mode == 'resume' }}
+      - name: Find latest checkpoint
+        id: checkpoint
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "generate_audio.yml",
+              branch: "main",
+              per_page: 20
+            });
+
+            const runs = response.data.workflow_runs
+              .filter(run => run.id !== context.runId && run.status === "completed")
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            for (const run of runs) {
+              const result = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100
+              });
+              const artifact = result.data.artifacts.find(
+                item => item.name === "tts-checkpoint" && !item.expired
+              );
+              if (artifact) {
+                core.setOutput("run_id", String(run.id));
+                core.info("Found checkpoint in previous run " + run.id + ".");
+                return;
+              }
+            }
+
+            core.setOutput("run_id", "");
+            core.info("No previous checkpoint found; a new job will be created.");
+
+      - name: Restore previous checkpoint
+        if: ${{ steps.checkpoint.outputs.run_id != '' }}
         uses: actions/download-artifact@v4
         with:
           name: tts-checkpoint
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.restore_run_id }}
+          run-id: ${{ steps.checkpoint.outputs.run_id }}
           path: .
 
-      - name: Generate new audio
-        id: new_audio
-        if: ${{ inputs.task_mode == 'new' }}
+      - name: Generate or resume long audio
+        id: tts
         env:
-          SOURCE_FILE: ${{ inputs.source_file }}
-          TITLE: ${{ inputs.title }}
           VOICE_CHOICE: ${{ inputs.voice }}
           RATE: ${{ inputs.rate }}
-          CHUNK_SIZE: ${{ inputs.chunk_size }}
         run: |
           case "$VOICE_CHOICE" in
             "Nam Minh") VOICE_ID="vi-VN-NamMinhNeural" ;;
             "Hoài My") VOICE_ID="vi-VN-HoaiMyNeural" ;;
             *) echo "::error::Giọng đọc không hợp lệ"; exit 1 ;;
           esac
-          if [[ -n "$TITLE" ]]; then
-            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE_ID" --rate "$RATE" --chunk-size "$CHUNK_SIZE" --title "$TITLE"
-          else
-            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE_ID" --rate "$RATE" --chunk-size "$CHUNK_SIZE"
-          fi
 
-      - name: Resume saved audio task
-        if: ${{ inputs.task_mode == 'resume' }}
-        env:
-          RESUME_JOB_ID: ${{ inputs.resume_job_id }}
-        run: |
-          python tts_cli.py --resume "$RESUME_JOB_ID"
+          # Stop before the overall job timeout so the checkpoint can be saved.
+          timeout --signal=INT --kill-after=30s 330m \
+            python tts_cli.py \
+              --input kichban.txt \
+              --voice "$VOICE_ID" \
+              --rate "$RATE" \
+              --chunk-size 2400 \
+              --auto-resume-matching
 
       - name: Upload completed MP3
-        if: ${{ success() && hashFiles('outputs/*.mp3') != '' }}
+        if: ${{ success() && steps.tts.outputs.output_file != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: audio-output-${{ github.run_id }}
-          path: outputs/*.mp3
+          path: ${{ steps.tts.outputs.output_file }}
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0
 
       - name: Upload checkpoint for retry/resume
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: tts-checkpoint
-          path: |
-            jobs/
-            outputs/
+          path: jobs/
           if-no-files-found: ignore
           retention-days: 7
+          compression-level: 0
