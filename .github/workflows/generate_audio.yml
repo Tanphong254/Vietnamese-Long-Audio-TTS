@@ -1,0 +1,176 @@
+name: Generate long audio
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_mode:
+        description: "Tạo audio mới hoặc tiếp tục tác vụ bị gián đoạn"
+        required: true
+        type: choice
+        default: new
+        options: [new, resume]
+      source_file:
+        description: "Đường dẫn TXT đã có trong repository (chỉ dùng khi tạo mới)"
+        required: false
+        type: string
+        default: input/kichban.txt
+      title:
+        description: "Tên truyện để đặt tên MP3 (không bắt buộc)"
+        required: false
+        type: string
+        default: ""
+      voice:
+        description: "Giọng đọc"
+        required: true
+        type: choice
+        default: vi-VN-NamMinhNeural
+        options:
+          - vi-VN-NamMinhNeural
+          - vi-VN-HoaiMyNeural
+      rate:
+        description: "Tốc độ đọc"
+        required: true
+        type: choice
+        default: "1.25"
+        options: ["0.75", "1.0", "1.25", "1.5", "1.75"]
+      chunk_size:
+        description: "Kích thước đoạn văn bản (ký tự)"
+        required: true
+        type: choice
+        default: "2400"
+        options: ["1200", "1800", "2400", "3000"]
+      resume_job_id:
+        description: "Mã tác vụ để tiếp tục (chỉ dùng ở chế độ resume)"
+        required: false
+        type: string
+        default: ""
+      restore_run_id:
+        description: "Run ID của lần chạy trước có artifact tts-checkpoint"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: long-audio-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Generate Vietnamese audiobook
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install FFmpeg and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate workflow inputs
+        env:
+          TASK_MODE: ${{ inputs.task_mode }}
+          SOURCE_FILE: ${{ inputs.source_file }}
+          RESUME_JOB_ID: ${{ inputs.resume_job_id }}
+          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          mode = os.environ["TASK_MODE"]
+          if mode == "resume":
+              job_id = os.environ.get("RESUME_JOB_ID", "").strip()
+              run_id = os.environ.get("RESTORE_RUN_ID", "").strip()
+              if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+                  sys.exit("Lỗi: chế độ resume cần resume_job_id gồm 32 ký tự hex.")
+              if not re.fullmatch(r"[0-9]+", run_id):
+                  sys.exit("Lỗi: chế độ resume cần restore_run_id (Run ID số của lần chạy trước).")
+              sys.exit(0)
+
+          root = Path.cwd().resolve()
+          raw = os.environ.get("SOURCE_FILE", "").strip()
+          if not raw:
+              sys.exit("Lỗi: source_file đang trống.")
+          source = Path(raw).resolve()
+          try:
+              source.relative_to(root)
+          except ValueError:
+              sys.exit("Lỗi: source_file phải nằm trong repository.")
+          if source.suffix.lower() != ".txt":
+              sys.exit("Lỗi: source_file phải là tệp .txt.")
+          if not source.is_file():
+              sys.exit(f"Không tìm thấy {raw}. Hãy thêm TXT vào repository rồi chạy lại.")
+          if source.stat().st_size == 0:
+              sys.exit("Lỗi: tệp văn bản trống.")
+          print(f"Đã xác nhận tệp đầu vào: {source.relative_to(root)}")
+          PY
+
+      - name: Restore checkpoint from previous run
+        if: ${{ inputs.task_mode == 'resume' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: tts-checkpoint
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.restore_run_id }}
+          path: .
+
+      - name: Generate new audio
+        id: new_audio
+        if: ${{ inputs.task_mode == 'new' }}
+        env:
+          SOURCE_FILE: ${{ inputs.source_file }}
+          TITLE: ${{ inputs.title }}
+          VOICE: ${{ inputs.voice }}
+          RATE: ${{ inputs.rate }}
+          CHUNK_SIZE: ${{ inputs.chunk_size }}
+        run: |
+          if [[ -n "$TITLE" ]]; then
+            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE" --rate "$RATE" --chunk-size "$CHUNK_SIZE" --title "$TITLE"
+          else
+            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE" --rate "$RATE" --chunk-size "$CHUNK_SIZE"
+          fi
+
+      - name: Resume saved audio task
+        if: ${{ inputs.task_mode == 'resume' }}
+        env:
+          RESUME_JOB_ID: ${{ inputs.resume_job_id }}
+        run: |
+          python tts_cli.py --resume "$RESUME_JOB_ID"
+
+      - name: Upload completed MP3
+        if: ${{ success() && hashFiles('outputs/*.mp3') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-output-${{ github.run_id }}
+          path: outputs/*.mp3
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload checkpoint for retry/resume
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tts-checkpoint
+          path: |
+            jobs/
+            outputs/
+          if-no-files-found: ignore
+          retention-days: 7
