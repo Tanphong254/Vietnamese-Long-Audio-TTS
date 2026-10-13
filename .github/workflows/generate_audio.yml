@@ -20,13 +20,13 @@ on:
         type: string
         default: ""
       voice:
-        description: "Giọng đọc"
+        description: "Giọng đọc tiếng Việt"
         required: true
         type: choice
-        default: vi-VN-NamMinhNeural
+        default: Nam Minh
         options:
-          - vi-VN-NamMinhNeural
-          - vi-VN-HoaiMyNeural
+          - Nam Minh
+          - Hoài My
       rate:
         description: "Tốc độ đọc"
         required: true
@@ -138,14 +138,19 @@ jobs:
         env:
           SOURCE_FILE: ${{ inputs.source_file }}
           TITLE: ${{ inputs.title }}
-          VOICE: ${{ inputs.voice }}
+          VOICE_CHOICE: ${{ inputs.voice }}
           RATE: ${{ inputs.rate }}
           CHUNK_SIZE: ${{ inputs.chunk_size }}
         run: |
+          case "$VOICE_CHOICE" in
+            "Nam Minh") VOICE_ID="vi-VN-NamMinhNeural" ;;
+            "Hoài My") VOICE_ID="vi-VN-HoaiMyNeural" ;;
+            *) echo "::error::Giọng đọc không hợp lệ"; exit 1 ;;
+          esac
           if [[ -n "$TITLE" ]]; then
-            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE" --rate "$RATE" --chunk-size "$CHUNK_SIZE" --title "$TITLE"
+            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE_ID" --rate "$RATE" --chunk-size "$CHUNK_SIZE" --title "$TITLE"
           else
-            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE" --rate "$RATE" --chunk-size "$CHUNK_SIZE"
+            python tts_cli.py --input "$SOURCE_FILE" --voice "$VOICE_ID" --rate "$RATE" --chunk-size "$CHUNK_SIZE"
           fi
 
       - name: Resume saved audio task
