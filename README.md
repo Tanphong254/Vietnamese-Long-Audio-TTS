@@ -1,115 +1,117 @@
-# Vietnamese Long Audio TTS
+# Vietnamese Long Audio TTS (Codespaces CLI)
 
-Ứng dụng web chạy cục bộ trên Windows, chuyển tiểu thuyết tiếng Việt thành audio MP3 dài bằng [Edge-TTS](https://github.com/rany2/edge-tts). Dự án hướng tới các bản đọc 1,5–2,5 giờ hoặc lâu hơn bằng cách chia văn bản thành từng đoạn, lưu tiến trình xuống đĩa và ghép audio bằng FFmpeg.
+Công cụ dòng lệnh tạo audio truyện dài tiếng Việt bằng [Edge-TTS](https://github.com/rany2/edge-tts). Dự án này **không có giao diện web/Flask**. Bạn chạy lệnh trong terminal của GitHub Codespaces, theo dõi tiến trình ngay trong terminal, rồi tải MP3 từ thư mục `outputs/`.
 
-> **Lưu ý:** Edge-TTS sử dụng dịch vụ giọng nói trực tuyến của Microsoft Edge và cần Internet. Đây không phải TTS hoàn toàn ngoại tuyến. Dự án không liên kết hoặc được Microsoft bảo trợ.
+Edge-TTS cần Internet để gọi dịch vụ tổng hợp giọng nói. Codespaces có giới hạn sử dụng và có thể phát sinh chi phí tùy tài khoản; đây không phải tài nguyên chạy miễn phí không giới hạn. Kiểm tra phần sử dụng Codespaces trong tài khoản trước khi chạy các tác vụ rất dài.
 
 ## Tính năng
 
-- Giao diện tiếng Việt chạy tại `http://127.0.0.1:5000`.
-- Giọng `vi-VN-NamMinhNeural` và `vi-VN-HoaiMyNeural`.
+- Nhận tệp truyện `.txt` UTF-8 hoặc UTF-8 BOM.
+- Giọng tiếng Việt Nam Minh và Hoài My.
 - Tốc độ đọc 0.75x, 1.0x, 1.25x, 1.5x và 1.75x.
-- Dán văn bản hoặc tải tệp `.txt` có mã hóa UTF-8/UTF-8 BOM.
-- Chia đoạn theo dấu câu, dòng và đoạn văn; giữ nguyên thứ tự và ký tự văn bản.
-- Worker nền xử lý tuần tự, thử lại lỗi tạm thời tối đa 3 lần.
-- Lưu audio của từng đoạn và trạng thái công việc vào `jobs/`.
-- Tiếp tục tác vụ đang chạy dở sau khi khởi động lại chương trình; bỏ qua audio đoạn còn hợp lệ.
-- Hủy tác vụ sau khi đoạn đang xử lý kết thúc; tiếp tục/thử lại tác vụ bị hủy hoặc thất bại.
-- Ghép các đoạn MP3 thành một tệp duy nhất trong `outputs/` bằng FFmpeg.
-- Hỗ trợ FFmpeg có trong PATH hoặc binary do `imageio-ffmpeg` cung cấp.
-- Tệp văn bản truyện, tác vụ, audio và môi trường ảo được loại khỏi Git bằng `.gitignore`.
+- Chia văn bản theo ranh giới tự nhiên, giữ nguyên nội dung và thứ tự.
+- Xử lý lần lượt từng đoạn, thử lại lỗi tạm thời.
+- Lưu trạng thái và audio của từng đoạn xuống đĩa.
+- Khôi phục tác vụ còn dở khi chạy lại trong cùng Codespace; không phải tạo lại những đoạn MP3 còn hợp lệ.
+- Tự ghép các đoạn thành một MP3 bằng FFmpeg.
+- Hỗ trợ liệt kê tác vụ, tiếp tục/thử lại và báo lỗi trong terminal.
+- GitHub Actions chạy kiểm thử tự động.
 
-## Cài đặt nhanh trên Windows
+## Chạy trên GitHub Codespaces
 
-1. Khuyến nghị cài Python 3.12 hoặc 3.13 từ [python.org](https://www.python.org/downloads/windows/). CI của dự án kiểm thử Python 3.11–3.13; Python 3.14 chưa được CI xác nhận. Bật Python Launcher nếu trình cài đặt có tùy chọn đó.
-2. Tải hoặc clone repository về máy.
-3. Nhấp đúp `run.bat`. Lần đầu, tập lệnh sẽ tạo `.venv`, cài thư viện trong `requirements.txt` và khởi động ứng dụng.
-4. Mở `http://127.0.0.1:5000` trong trình duyệt.
-5. Để dừng ứng dụng, quay lại cửa sổ terminal và nhấn `Ctrl+C`.
+1. Mở [repository này](https://github.com/Tanphong254/Vietnamese-Long-Audio-TTS).
+2. Bấm **Code → Codespaces → Create codespace on main**. Nếu GitHub hỏi cấu hình, chọn cấu hình mặc định của repository.
+3. Chờ môi trường hoàn tất cài đặt. Tệp `.devcontainer/devcontainer.json` cài Python dependencies và FFmpeg.
+4. Mở terminal bên trong Codespaces. Tạo thư mục đầu vào riêng:
 
-Nếu `run.bat` không tìm thấy Python, mở PowerShell tại thư mục dự án và kiểm tra:
+   ```bash
+   mkdir -p input jobs outputs
+   ```
 
-```powershell
-py -3 --version
+5. Tải tệp truyện từ máy tính vào thư mục `input/` bằng File Explorer của VS Code Web (dùng menu Upload nếu có, hoặc kéo thả tệp vào Explorer). Không cần và không nên commit tệp truyện lên GitHub.
+6. Kiểm tra lệnh đã sẵn sàng:
+
+   ```bash
+   python --version
+   python tts_cli.py --help
+   ```
+
+## Tạo audio
+
+Ví dụ đọc tệp `input/truyen.txt` bằng giọng nam Nam Minh tốc độ 1.25x:
+
+```bash
+python tts_cli.py --input input/truyen.txt --voice vi-VN-NamMinhNeural --rate 1.25
 ```
 
-Nếu lệnh hoạt động, có thể cài và chạy thủ công:
+Dùng giọng nữ Hoài My tốc độ bình thường:
 
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe app.py
+```bash
+python tts_cli.py --input input/truyen.txt --voice vi-VN-HoaiMyNeural --rate 1.0
 ```
 
-Nếu lệnh `py` cũng không được nhận diện, cài Python và mở lại VS Code/Terminal. Nếu đã đổi `requirements.txt` sau lần cài đầu tiên, chạy:
+Điều chỉnh kích thước đoạn (500–3500 ký tự; mặc định 2400):
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```bash
+python tts_cli.py --input input/truyen.txt --chunk-size 1800
 ```
 
-## Cách sử dụng
+Khi hoàn tất, terminal sẽ in đường dẫn MP3. Mở thư mục `outputs/` trong Explorer của Codespaces, bấm chuột phải vào tệp MP3 và tải xuống. Tải MP3 về máy tính trước khi xóa Codespace. **Dữ liệu trong Codespace không nằm trong Git commit; nếu bạn xóa Codespace thì các tệp riêng và audio trong ổ đĩa Codespace cũng có thể bị mất.**
 
-1. Nhập tên truyện, rồi dán văn bản hoặc chọn tệp TXT.
-2. Chọn giọng đọc, tốc độ và độ dài đoạn (mặc định 2.400 ký tự). Đoạn ngắn hơn có thể giảm rủi ro lỗi dịch vụ nhưng tạo ra nhiều yêu cầu hơn.
-3. Nhấn **Tạo audio truyện**. Worker chạy nền; trạng thái cập nhật trên giao diện.
-4. Khi tất cả đoạn thành công, ứng dụng tự ghép MP3. Tải tệp hoàn chỉnh trong khu vực kết quả.
-5. Nếu tác vụ thất bại, đọc thông báo, kiểm tra Internet rồi chọn **Thử lại / tiếp tục**. Các đoạn MP3 hợp lệ được giữ lại.
+## Theo dõi, liệt kê và tiếp tục
 
-## Dữ liệu nằm ở đâu?
+Liệt kê các tác vụ đã lưu:
 
-- `jobs/<job_id>/source.txt`: văn bản nguồn của tác vụ.
-- `jobs/<job_id>/status.json`: trạng thái và thông tin từng đoạn.
-- `jobs/<job_id>/segments/`: MP3 từng đoạn.
-- `outputs/`: MP3 hoàn chỉnh.
+```bash
+python tts_cli.py --list-jobs
+```
 
-Các đường dẫn này nằm trên máy cục bộ. Không đưa truyện riêng tư, tệp MP3 hoặc dữ liệu trong `jobs/`/`outputs/` lên repository công khai. Dự án có `.gitignore` để loại chúng khỏi Git mặc định; hãy kiểm tra `git status` trước khi commit.
+Mỗi lần tạo audio, chương trình in ra mã tác vụ. Ghi lại mã này. Nếu tác vụ bị gián đoạn, Codespace bị dừng, hoặc một đoạn thất bại, chạy:
 
-## Khôi phục và giới hạn
+```bash
+python tts_cli.py --resume MA_TAC_VU
+```
 
-- Tác vụ đang chờ/đang chạy/đang ghép khi chương trình tắt bất ngờ sẽ được đưa lại vào hàng đợi khi mở ứng dụng.
-- Tác vụ đã đánh dấu `failed` hoặc `cancelled` cần người dùng bấm thử lại/tiếp tục.
-- Các đoạn được lưu riêng để hạn chế phải tổng hợp lại toàn bộ truyện. Nếu tệp đoạn bị hỏng hoặc rỗng, nó sẽ được tạo lại.
-- Tiến trình phản ánh số đoạn đã tạo thực tế. Trong lúc ghép MP3, phần trăm hiển thị 98% cho tới khi tệp hoàn chỉnh được kiểm tra.
-- Tốc độ thực tế phụ thuộc dịch vụ Edge-TTS, độ dài nội dung, mạng và giới hạn dịch vụ. Không thể bảo đảm mọi tác vụ dài đều hoàn thành trong một lần.
-- Ứng dụng chỉ bind vào `127.0.0.1`, không bật Flask debug server và không có xác thực người dùng. Không chỉnh host sang `0.0.0.0` nếu không triển khai thêm các biện pháp bảo mật.
-- Giới hạn hiện tại: tối đa 20 triệu ký tự cho mỗi tác vụ và 100 MiB cho một yêu cầu HTTP.
+Thay `MA_TAC_VU` bằng ID được in trong terminal. Chương trình sẽ thử lại tác vụ lỗi/bị hủy và giữ những đoạn audio đã tạo hợp lệ. Nếu tác vụ còn chạy trong terminal cũ, không khởi động một lệnh resume thứ hai cho cùng tác vụ.
+
+Bạn có thể nhấn `Ctrl+C` để ngừng theo dõi; nếu tiến trình bị dừng, hãy dùng `--resume` để tiếp tục. Việc tổng hợp một đoạn đang gọi dịch vụ mạng có thể chưa dừng tức thì.
+
+## Tệp và dữ liệu cá nhân
+
+- `tts_cli.py`: lệnh dòng lệnh chính.
+- `tts_engine.py`: chia văn bản, hàng đợi, lưu tiến độ, Edge-TTS và ghép MP3.
+- `.devcontainer/devcontainer.json`: cấu hình môi trường Codespaces.
+- `input/`: tệp truyện bạn tải vào; được `.gitignore` loại khỏi Git.
+- `jobs/`: văn bản nguồn, trạng thái tác vụ và các đoạn MP3; được loại khỏi Git.
+- `outputs/`: MP3 hoàn chỉnh; được loại khỏi Git.
+
+Repository này là Public. Đừng commit văn bản truyện, dữ liệu cá nhân hoặc các tệp MP3. Trước khi commit mọi thay đổi, kiểm tra:
+
+```bash
+git status --short
+```
+
+`.gitignore` giảm nguy cơ đưa nhầm dữ liệu vào Git nhưng không thay thế việc kiểm tra thủ công.
 
 ## Kiểm thử
 
-```powershell
-py -3 -m pip install -r requirements-dev.txt
-py -3 -m pytest -q
+Trong Codespaces:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-Các kiểm thử tự động không gửi nội dung lên Edge-TTS và không xác minh chất lượng giọng nói trực tuyến. Để kiểm tra tích hợp thực tế, hãy tạo một tác vụ thử ngắn khi có Internet.
+Các bài kiểm thử dùng hàm tổng hợp giả để không cần gửi văn bản thử lên dịch vụ Edge-TTS. Bài kiểm thử thành công không bảo đảm dịch vụ mạng luôn sẵn sàng hay mọi truyện rất dài sẽ hoàn tất không lỗi.
 
-## Tạo repository Public trên GitHub
+## Giới hạn cần biết
 
-1. Mở [GitHub New repository](https://github.com/new), đặt tên `Vietnamese-Long-Audio-TTS` và chọn **Public**.
-2. Không chọn khởi tạo README, `.gitignore` hoặc license trên GitHub (những tệp đó đã có sẵn trong dự án).
-3. Mở terminal trong thư mục dự án và chạy lệnh sau, thay `<YOUR_GITHUB_USERNAME>` bằng tên tài khoản GitHub của bạn:
-
-```powershell
-git init
-git add .
-git status
-git commit -m "Initial Vietnamese Long Audio TTS project"
-git branch -M main
-git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/Vietnamese-Long-Audio-TTS.git
-git push -u origin main
-```
-
-Trước khi `git commit`, hãy xem `git status` để xác nhận không có truyện, audio, `.venv` hoặc dữ liệu tác vụ trong danh sách. Nếu Git chưa được cài đặt, cài [Git for Windows](https://git-scm.com/download/win) rồi mở Terminal mới.
-
-## Công nghệ
-
-- Python, Flask
-- Edge-TTS
-- FFmpeg / imageio-ffmpeg
-- HTML, CSS, JavaScript
-- pytest cho kiểm thử phần lõi
+- Tác vụ dài phụ thuộc tốc độ mạng, dịch vụ Edge-TTS và thời gian/dung lượng Codespaces khả dụng.
+- Quá trình không thể bảo đảm hoàn thành khi môi trường bị xóa, lưu trữ bị đầy hoặc dịch vụ từ chối yêu cầu. Hãy tải MP3 hoàn chỉnh về máy sau khi tạo.
+- Không commit nội dung truyện hoặc audio vào repository Public.
+- Edge-TTS dùng dịch vụ trực tuyến, không phải engine ngoại tuyến.
+- Đây là dự án độc lập, không được Microsoft bảo trợ.
 
 ## License
 
-MIT. Các thành phần phụ thuộc có giấy phép riêng; hãy xem thông tin license tương ứng của từng dự án, đặc biệt khi phân phối binary FFmpeg.
+MIT. Các thư viện và binary bên thứ ba có giấy phép riêng.
