@@ -17,42 +17,23 @@ Edge-TTS cần Internet để gọi dịch vụ giọng nói trực tuyến. Git
 
 ## Chuẩn bị tệp truyện
 
-1. Tạo thư mục input trong repository nếu chưa có.
-2. Thêm tệp TXT mã hóa UTF-8 vào đó, ví dụ input/kichban.txt.
-3. Commit tệp lên branch main.
+Mở tệp **`kichban.txt` ở thư mục gốc** của repository, bấm biểu tượng cây bút **Edit**, thay dòng `__DAN_NOI_DUNG_TRUYEN_VAO_DAY__` bằng toàn bộ nội dung truyện, rồi **Commit changes**. Bạn không cần tạo tệp mới mỗi lần; chỉ sửa nội dung trong `kichban.txt` trước khi chạy.
 
-**Repository Public nghĩa là tệp truyện trong repository cũng công khai.** Nếu không muốn nội dung truyện bị công khai, đừng tải tệp truyện lên repository Public. Hãy đổi repository sang Private trước khi thêm nội dung. Trường source_file là đường dẫn tệp đã tồn tại trên branch, không phải hộp thoại tải tệp trong giao diện Run workflow.
+**Cảnh báo: repository này là Public nên nội dung `kichban.txt` được commit sẽ công khai.** Nếu truyện cần giữ riêng tư, hãy chuyển repository sang Private trước khi đưa nội dung thật vào tệp.
 
 ## Tạo audio trên GitHub
 
 1. Mở tab **Actions** của repository.
 2. Chọn workflow **Generate long audio** ở cột trái.
 3. Bấm **Run workflow**.
-4. Chọn branch main, rồi nhập:
-   - **task_mode:** new
-   - **source_file:** input/kichban.txt
-   - **title:** tên truyện (tùy chọn)
-   - **voice:** Nam Minh hoặc Hoài My
-   - **rate:** 0.75, 1.0, 1.25, 1.5 hoặc 1.75
-   - **chunk_size:** 1200, 1800, 2400 hoặc 3000
+4. Trong biểu mẫu chỉ cần chọn **giọng đọc** (Nam Minh hoặc Hoài My) và **tốc độ**. Nội dung luôn lấy từ `kichban.txt`; kích thước đoạn được xử lý tự động bên trong chương trình.
 5. Bấm nút xanh **Run workflow**.
-6. Mở lượt chạy vừa xuất hiện, chọn job **Generate Vietnamese audiobook** để xem log và tiến trình. Không cần giữ tab trình duyệt mở, nhưng lượt chạy sẽ bị giới hạn thời gian.
-7. Khi hoàn thành, kéo xuống phần **Artifacts** ở trang chi tiết lượt chạy. Tải artifact có tên bắt đầu bằng audio-output, rồi giải nén để lấy tệp MP3.
+6. Mở lượt chạy vừa xuất hiện, chọn job **Generate Vietnamese audiobook** để xem log và tiến trình.
+7. Khi hoàn thành, kéo xuống phần **Artifacts** ở trang chi tiết lượt chạy. Tải artifact `audio-output-...`, rồi giải nén để lấy tệp MP3.
 
 ## Tiếp tục khi tác vụ bị gián đoạn
 
-Khi lượt chạy thất bại, workflow sẽ cố tải artifact tts-checkpoint lên trong 7 ngày. Artifact này có trạng thái tác vụ và các đoạn MP3 đã sinh ra để khôi phục tiến trình. Giữ lại tệp đầu vào gốc trên repository và không xóa artifact trước khi tiếp tục.
-
-1. Mở trang chi tiết của lượt chạy bị lỗi.
-2. Trong log của job, tìm dòng “Mã tác vụ:” và sao chép mã gồm 32 ký tự hex.
-3. Sao chép **Run ID** từ URL trang chạy. Ví dụ URL có dạng https://github.com/OWNER/REPO/actions/runs/1234567890, thì 1234567890 là Run ID.
-4. Vào **Actions → Generate long audio → Run workflow**, chọn:
-   - **task_mode:** resume
-   - **resume_job_id:** mã tác vụ từ log
-   - **restore_run_id:** Run ID của lượt chạy trước
-5. Bấm **Run workflow**. Workflow khôi phục artifact rồi tiếp tục tác vụ và giữ các đoạn MP3 hợp lệ.
-
-Nếu lượt chạy trước không có artifact tts-checkpoint hoặc artifact đã hết hạn, việc resume sẽ không thực hiện được. Đừng xóa một lượt chạy đang cần dùng để khôi phục.
+Mỗi lượt chạy tìm checkpoint gần nhất còn hạn và tự động tiếp tục nếu văn bản trong `kichban.txt`, giọng đọc và tốc độ khớp với tác vụ đang dở. Bạn chỉ cần sửa `kichban.txt` khi muốn tạo audio cho nội dung mới, rồi chạy workflow với giọng/tốc độ mong muốn. Nếu checkpoint trước đã hết hạn hoặc tải lên thất bại, hãy chạy lại; các đoạn không có trong checkpoint sẽ cần tạo lại.
 
 ## Kiểm thử
 
