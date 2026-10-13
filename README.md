@@ -35,6 +35,14 @@ Mở tệp **`kichban.txt` ở thư mục gốc** của repository, bấm biểu
 
 Mỗi lượt chạy tìm checkpoint gần nhất còn hạn và tự động tiếp tục nếu văn bản trong `kichban.txt`, giọng đọc và tốc độ khớp với tác vụ đang dở. Bạn chỉ cần sửa `kichban.txt` khi muốn tạo audio cho nội dung mới, rồi chạy workflow với giọng/tốc độ mong muốn. Nếu checkpoint trước đã hết hạn hoặc tải lên thất bại, hãy chạy lại; các đoạn không có trong checkpoint sẽ cần tạo lại.
 
+## Lỗi Edge-TTS 403
+
+Nếu log có `WSServerHandshakeError: 403, message='Invalid response status'`, đây là lỗi bắt tay WebSocket từ dịch vụ Edge-TTS, không phải do độ dài tệp truyện. Lỗi tương tự đang được báo với `edge-tts 7.2.8` trong [upstream issue #490](https://github.com/rany2/edge-tts/issues/490).
+
+Mã nguồn hiện dùng endpoint WebSocket thay thế đã được cộng đồng báo là hoạt động trong một số trường hợp. Đây là workaround chưa phải bản sửa chính thức; nếu Microsoft tiếp tục thay đổi dịch vụ, nó có thể cần cập nhật. Mỗi đoạn chỉ được thử lại hữu hạn để tránh lặp vô hạn.
+
+Nếu upstream phát hành bản sửa chính thức, có thể bỏ cấu hình thay thế. Để ép dùng endpoint mặc định đi kèm thư viện, đặt biến môi trường `EDGE_TTS_WEBSOCKET_URL=default`. Để thử một endpoint khác, đặt biến này thành URL WebSocket đầy đủ.
+
 ## Kiểm thử
 
 Workflow Tests chạy tự động khi đẩy thay đổi lên main hoặc tạo Pull Request. Các bài kiểm thử cốt lõi dùng engine giả, không gửi nội dung thử lên dịch vụ Edge-TTS.
