@@ -280,8 +280,6 @@ class JobManager:
         if voice not in VOICE_OPTIONS:
             raise ValueError("Giọng đọc không hợp lệ.")
         rate_to_edge(rate)
-        if len(text) > 20_000_000:
-            raise ValueError("Văn bản vượt quá giới hạn an toàn 20 triệu ký tự cho một tác vụ.")
         chunks = split_text(text, chunk_size)
         if not chunks:
             raise ValueError("Văn bản đang trống.")
@@ -581,8 +579,8 @@ class JobManager:
 
     def retry(self, job_id: str) -> dict[str, Any]:
         state = self._load(job_id)
-        if state.get("status") not in {"failed", "cancelled"}:
-            raise ValueError("Chỉ có thể thử lại tác vụ đã lỗi hoặc đã hủy.")
+        if state.get("status") not in {"failed", "cancelled", "suspended"}:
+            raise ValueError("Chỉ có thể thử lại tác vụ đã lỗi, đã hủy hoặc đang tạm dừng.")
         segment_dir = self._job_dir(job_id) / "segments"
         for item in state.get("segments", []):
             index = int(item["index"])
