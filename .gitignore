@@ -23,3 +23,5 @@ venv/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# kichban.txt is intentionally tracked for GitHub Actions; its contents are public.
