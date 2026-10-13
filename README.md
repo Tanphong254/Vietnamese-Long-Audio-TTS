@@ -9,7 +9,7 @@ Edge-TTS cần Internet để gọi dịch vụ giọng nói trực tuyến. Git
 ## Tính năng
 
 - Khởi chạy từ **Actions → Generate long audio → Run workflow**.
-- Giọng tiếng Việt Nam Minh và Hoài My; tốc độ từ 0.75x đến 1.75x.
+- Chỉ có hai giọng tiếng Việt: **Nam Minh** (`vi-VN-NamMinhNeural`) và **Hoài My** (`vi-VN-HoaiMyNeural`); tốc độ từ 0.75x đến 1.75x.
 - Chia văn bản dài thành đoạn, xử lý tuần tự và ghép thành MP3.
 - Lưu audio từng đoạn trong lúc chạy; có thể khôi phục từ checkpoint artifact sau khi tác vụ thất bại.
 - Tải MP3 cuối cùng qua artifact audio-output.
@@ -32,7 +32,7 @@ Edge-TTS cần Internet để gọi dịch vụ giọng nói trực tuyến. Git
    - **task_mode:** new
    - **source_file:** input/kichban.txt
    - **title:** tên truyện (tùy chọn)
-   - **voice:** vi-VN-NamMinhNeural hoặc vi-VN-HoaiMyNeural
+   - **voice:** Nam Minh hoặc Hoài My
    - **rate:** 0.75, 1.0, 1.25, 1.5 hoặc 1.75
    - **chunk_size:** 1200, 1800, 2400 hoặc 3000
 5. Bấm nút xanh **Run workflow**.
