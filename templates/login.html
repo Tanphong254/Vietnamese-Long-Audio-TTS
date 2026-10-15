@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập · Audio Studio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <main class="login-wrap">
+    <section class="card login-card">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">◖</span>
+        <span><strong>Audio Studio</strong><small>Vietnamese long-form TTS</small></span>
+      </a>
+      <h1>Chào mừng trở lại</h1>
+      <p>Nhập mật khẩu website để quản lý các lượt tạo audio của bạn.</p>
+      {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+      {% if not password_required %}
+      <p>Máy chủ chưa cấu hình mật khẩu. Hãy chỉ chạy ở máy cá nhân hoặc đặt biến WEB_APP_PASSWORD khi triển khai.</p>
+      {% endif %}
+      <form method="post">
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="primary-button" type="submit">Đăng nhập</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
