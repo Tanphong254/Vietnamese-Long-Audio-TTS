@@ -40,8 +40,19 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install Edge-TTS
-        run: python -m pip install --upgrade pip edge-tts
+      - name: Install Edge-TTS with current protocol support
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python - <<'PY'
+          from importlib.metadata import version
+          from edge_tts.constants import SEC_MS_GEC_VERSION
+
+          print(f"Edge-TTS version: {version('edge-tts')}")
+          print(f"Handshake version: {SEC_MS_GEC_VERSION}")
+          if not SEC_MS_GEC_VERSION.startswith("2-"):
+              raise SystemExit("Edge-TTS chưa hỗ trợ handshake Sec-MS-GEC v2.")
+          PY
 
       - name: Validate kichban.txt
         run: |
