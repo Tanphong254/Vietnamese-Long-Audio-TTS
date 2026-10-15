@@ -49,9 +49,19 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+class ClosingConnection(sqlite3.Connection):
+    """A SQLite connection that also closes when used as a context manager."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 def connect_db() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH, timeout=30)
+    connection = sqlite3.connect(DB_PATH, timeout=30, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA busy_timeout=30000")
