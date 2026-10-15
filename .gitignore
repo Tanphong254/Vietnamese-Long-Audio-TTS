@@ -25,3 +25,6 @@ Thumbs.db
 .vscode/
 
 # kichban.txt is intentionally tracked for GitHub Actions; its contents are public.
+
+# Local web-app job database and generated audio
+/data/
