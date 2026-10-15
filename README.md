@@ -25,9 +25,11 @@ Mở kichban.txt trong repository, bấm biểu tượng bút chì Edit, thay d�
 5. Bấm Run workflow.
 6. Khi chạy thành công, mở trang chi tiết lượt chạy, tải artifact audio-output và giải nén để lấy audio_youtube.mp3.
 
-## Lỗi Edge-TTS 403
+## Lỗi Edge-TTS 403/429
 
-Mã nguồn dùng tạm thời một endpoint WebSocket thay thế, do lỗi HTTP 403 đang được báo cáo trong upstream issue #490 của edge-tts. Đây là workaround cộng đồng, không phải sửa đổi chính thức của Microsoft; có thể cần cập nhật nếu dịch vụ thay đổi tiếp.
+Dịch vụ đọc trực tuyến của Edge đã thay đổi cách bắt tay WebSocket trong tháng 10/2026. Workflow hiện ghim một commit của dự án Edge-TTS upstream có hỗ trợ định dạng Sec-MS-GEC v2 và dùng endpoint mặc định của thư viện, thay vì ghép endpoint thay thế với thư viện dùng giao thức cũ.
+
+Đây vẫn là cách sử dụng dịch vụ đọc trực tuyến không có API ổn định được Microsoft cam kết hỗ trợ; dịch vụ có thể thay đổi hoặc giới hạn yêu cầu bất cứ lúc nào. Mã HTTP 429 cũng có thể là giới hạn phía dịch vụ. Nếu vẫn gặp 429 sau khi workflow xác nhận handshake v2, đừng liên tục chạy lại toàn bộ truyện ngay lập tức: chờ một lúc rồi thử lại, và xem log để biết lỗi xảy ra ở bước nào. Bản hiện tại vẫn tổng hợp lại toàn bộ kịch bản khi một lần chạy thất bại giữa chừng.
 
 ## Giới hạn thực tế
 
