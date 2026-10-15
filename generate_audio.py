@@ -44,26 +44,22 @@ def read_text_file(path: str | Path) -> str:
 
 
 def configure_websocket_endpoint() -> None:
-    """Temporary workaround for Edge-TTS WebSocket handshake HTTP 403."""
+    """Use Edge-TTS's upstream endpoint unless an explicit override is supplied.
+
+    The upstream Edge-TTS code now handles the current Sec-MS-GEC v2 handshake.
+    Forcing an alternate endpoint while installing a package with an older
+    handshake can make the service reject the WebSocket request.
+    """
     try:
         import edge_tts.communicate as edge_communicate
-        from edge_tts.constants import TRUSTED_CLIENT_TOKEN
     except ImportError as exc:
         raise RuntimeError(
             "Chưa cài edge-tts. Hãy chạy: python -m pip install -r requirements.txt"
         ) from exc
 
     override = os.environ.get("EDGE_TTS_WEBSOCKET_URL", "").strip()
-    if override.lower() == "default":
-        return
-    if override:
+    if override and override.lower() != "default":
         edge_communicate.WSS_URL = override
-        return
-    edge_communicate.WSS_URL = (
-        "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
-        f"?Ocp-Apim-Subscription-Key={TRUSTED_CLIENT_TOKEN}"
-    )
-
 
 async def synthesize_one_audio(
     text: str,
