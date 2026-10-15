@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fc">
+  <title>Vietnamese Long Audio Studio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">◖</span>
+      <span><strong>Audio Studio</strong><small>Vietnamese long-form TTS</small></span>
+    </a>
+    <div class="top-actions">
+      <span class="service-badge"><i></i> Edge neural voice</span>
+      {% if password_enabled %}
+      <form method="post" action="{{ url_for('logout') }}"><button class="logout-button" type="submit">Đăng xuất</button></form>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="editor card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TEXT TO SPEECH</p>
+          <h1>Sinh giọng từ văn bản</h1>
+          <p class="muted intro">Dán nội dung truyện, chọn giọng đọc và tốc độ. Mỗi lần nhấn tạo sẽ có một mã AU riêng.</p>
+        </div>
+      </div>
+
+      <form id="generate-form">
+        <label for="content" class="field-label">Nội dung</label>
+        <textarea id="content" name="content" spellcheck="false" placeholder="Dán nội dung truyện của bạn vào đây..." required></textarea>
+        <div class="text-stats">
+          <span id="char-count">0 ký tự</span>
+          <span id="word-count">0 từ</span>
+          <span id="time-estimate">Ước tính: —</span>
+        </div>
+
+        <div class="settings-grid">
+          <div class="field">
+            <label for="voice" class="field-label">Giọng đọc</label>
+            <select id="voice" name="voice">
+              {% for voice_id, voice_label in voices.items() %}
+              <option value="{{ voice_id }}" {% if voice_id == 'vi-VN-NamMinhNeural' %}selected{% endif %}>{{ voice_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="rate" class="field-label">Tốc độ đọc</label>
+            <select id="rate" name="rate">
+              {% for rate in rates %}
+              <option value="{{ rate }}" {% if rate == '1.25' %}selected{% endif %}>{{ rate }}×</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <p class="privacy-note"><span aria-hidden="true">🔒</span> Nội dung chỉ được lưu tạm khi đang xử lý; khi hoàn tất hoặc lỗi, văn bản sẽ bị xóa khỏi hàng đợi.</p>
+          <button id="submit-button" class="primary-button" type="submit">
+            <span class="button-icon" aria-hidden="true">▶</span>
+            <span id="submit-label">Tạo audio</span>
+          </button>
+        </div>
+        <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <aside class="side-column">
+      <section class="card current-card">
+        <div class="card-heading">
+          <h2><span class="heading-icon">♫</span> Kết quả</h2>
+          <span id="current-status" class="status-pill idle">Chưa tạo</span>
+        </div>
+        <div id="current-result" class="current-result empty">
+          <div class="empty-icon" aria-hidden="true">♫</div>
+          <strong>Audio sẽ hiện ở đây</strong>
+          <p>Sau khi bạn bấm tạo, trạng thái và thời gian sẽ được cập nhật tại đây.</p>
+        </div>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">YOUR LIBRARY</p>
+            <h2>Gần đây</h2>
+          </div>
+          <button id="refresh-button" class="text-button" type="button">Làm mới ↻</button>
+        </div>
+        <p class="muted history-helper">Số AU được cấp theo thứ tự bạn nhấn tạo, không đổi khi một lượt thất bại.</p>
+        <div id="history-list" class="history-list">
+          <div class="history-empty">Chưa có lượt tạo audio nào.</div>
+        </div>
+      </section>
+
+      <section class="card tips-card">
+        <h2><span aria-hidden="true">✦</span> Mẹo đọc tự nhiên</h2>
+        <ul>
+          <li>Chèn <code>[cười]</code>, <code>[thở dài]</code> hoặc <code>[hắng giọng]</code> chỉ khi bạn muốn thử cách đọc có cảm xúc; giọng đọc có thể đọc các dấu này thành lời.</li>
+          <li>Dấu chấm, dấu phẩy và xuống dòng giúp nhịp nghỉ rõ ràng hơn.</li>
+          <li>Audio dài có thể mất nhiều thời gian. Hãy giữ trang mở khi chờ và tải file về khi hoàn tất.</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>Vietnamese Long Audio Studio</span>
+    <span>Audio được tạo tuần tự để hạn chế lỗi dịch vụ.</span>
+  </footer>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
